@@ -2,6 +2,13 @@ use ark_bn254::Bn254;
 use ark_ec::{CurveGroup, PrimeGroup, pairing::Pairing};
 use ark_ff::{Field, Zero};
 use ark_poly::{DenseUVPolynomial, Polynomial, univariate::DensePolynomial};
+use ark_relations::{
+    lc,
+    r1cs::{
+        ConstraintMatrices, ConstraintSynthesizer, ConstraintSystem, ConstraintSystemRef,
+        OptimizationGoal, Result as R1CSResult, SynthesisError,
+    },
+};
 use ark_std::{
     UniformRand,
     rand::{Rng, SeedableRng, rngs::StdRng},
@@ -50,6 +57,28 @@ pub struct Circuit<E: Pairing> {
 
     pub num_public_inputs: usize,
     pub num_private_inputs: usize,
+}
+
+#[derive(Clone)]
+struct MyCircuit<F: Field> {
+    a: Option<F>,
+    b: Option<F>,
+}
+
+impl<F: Field> ConstraintSynthesizer<F> for MyCircuit<F> {
+    fn generate_constraints(self, cs: ConstraintSystemRef<F>) -> R1CSResult<()> {
+        let a = cs.new_witness_variable(|| self.a.ok_or(SynthesisError::AssignmentMissing))?;
+        let b = cs.new_witness_variable(|| self.b.ok_or(SynthesisError::AssignmentMissing))?;
+        let c = cs.new_input_variable(|| {
+            let mut a = self.a.ok_or(SynthesisError::AssignmentMissing)?;
+            let b = self.b.ok_or(SynthesisError::AssignmentMissing)?;
+            a *= &b;
+            Ok(a)
+        })?;
+
+        cs.enforce_constraint(lc!() + a, lc!() + b, lc!() + c)?;
+        Ok(())
+    }
 }
 
 impl<E: Pairing> Circuit<E> {
@@ -279,54 +308,64 @@ fn verify<E: Pairing>(
     .0 == E::pairing(proof.a_g1, proof.b_g2).0
 }
 
+fn constraint_matrices_to_dense_matrices<F: Field>(
+    cm: &ConstraintMatrices<F>,
+) -> (Vec<Vec<F>>, Vec<Vec<F>>, Vec<Vec<F>>) {
+    let mut dense_matrices =
+        vec![
+            vec![
+                vec![F::zero(); cm.num_instance_variables + cm.num_witness_variables];
+                cm.num_constraints
+            ];
+            3
+        ];
+    for (i, &sparse_matrix) in [&cm.a, &cm.b, &cm.c].iter().enumerate() {
+        for (j, row) in sparse_matrix.iter().enumerate() {
+            for elem in row {
+                dense_matrices[i][j][elem.1] = elem.0;
+            }
+        }
+    }
+    (
+        dense_matrices[0].clone(),
+        dense_matrices[1].clone(),
+        dense_matrices[2].clone(),
+    )
+}
+
 fn main() {
     type P = Bn254;
     type ScalarField = <P as Pairing>::ScalarField;
 
-    let num_public_inputs = 1;
-    let num_private_inputs = 4;
-    let circuit: Circuit<P> = Circuit {
-        l: [
-            [0, 1, 0, 0, 0],
-            [0, 0, 1, 0, 0],
-            [0, 0, 0, 1, 0],
-            [0, 0, 0, 0, 1],
-            [0, 1, 0, 0, 0],
-            [0, 1, 0, 0, 0],
-            [0, 0, 1, 0, 0],
-        ]
-        .into_iter()
-        .map(|r| r.into_iter().map(ScalarField::from).collect())
-        .collect(),
-        r: [
-            [0, 1, 0, 0, 0],
-            [0, 0, 1, 0, 0],
-            [0, 0, 0, 1, 0],
-            [0, 0, 0, 0, 1],
-            [0, 0, 1, 0, 0],
-            [0, 0, 0, 0, 1],
-            [0, 0, 0, 1, 0],
-        ]
-        .into_iter()
-        .map(|r| r.into_iter().map(ScalarField::from).collect())
-        .collect(),
-        o: [
-            [-2, 3, 0, 0, 0],
-            [-2, 0, 3, 0, 0],
-            [-2, 0, 0, 3, 0],
-            [-2, 0, 0, 0, 3],
-            [2, 0, 0, 0, 0],
-            [2, 0, 0, 0, 0],
-            [2, 0, 0, 0, 0],
-        ]
-        .into_iter()
-        .map(|r| r.into_iter().map(ScalarField::from).collect())
-        .collect(),
-        num_public_inputs,
-        num_private_inputs,
+    let c = MyCircuit {
+        a: Some(ScalarField::from(5)),
+        b: Some(ScalarField::from(7)),
     };
 
-    let a: Vec<ScalarField> = [1, 1, 2, 1, 2].into_iter().map(ScalarField::from).collect();
+    let cs = ConstraintSystem::<ScalarField>::new_ref();
+    cs.set_optimization_goal(OptimizationGoal::None);
+    c.generate_constraints(cs.clone()).unwrap();
+    cs.finalize();
+    assert!(cs.is_satisfied().unwrap());
+
+    let (l, r, o) = constraint_matrices_to_dense_matrices(&cs.to_matrices().unwrap());
+    let binding = cs.borrow().unwrap();
+    let a = [
+        binding.instance_assignment.clone(),
+        binding.witness_assignment.clone(),
+    ]
+    .concat();
+    println!("num_instance_variables: {}", cs.num_instance_variables());
+    println!("num_witness_variables: {}", cs.num_witness_variables());
+    println!("{:?}", a);
+
+    let circuit: Circuit<P> = Circuit {
+        l,
+        r,
+        o,
+        num_public_inputs: cs.num_instance_variables(),
+        num_private_inputs: cs.num_witness_variables(),
+    };
 
     // R1CS verification
     // TODO: remove
@@ -364,14 +403,6 @@ fn main() {
     println!("proof: {:?}", &proof);
     println!(
         "verified: {}",
-        verify::<P>(
-            &circuit,
-            &srs,
-            [1].into_iter()
-                .map(ScalarField::from)
-                .collect::<Vec<ScalarField>>()
-                .as_slice(),
-            &proof
-        )
+        verify::<P>(&circuit, &srs, &public_inputs, &proof)
     );
 }
