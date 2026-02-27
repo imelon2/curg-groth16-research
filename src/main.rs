@@ -29,28 +29,6 @@ pub struct Circuit<E: Pairing> {
     pub num_private_inputs: usize,
 }
 
-#[derive(Clone)]
-struct MyCircuit<F: Field> {
-    a: Option<F>,
-    b: Option<F>,
-}
-
-impl<F: Field> ConstraintSynthesizer<F> for MyCircuit<F> {
-    fn generate_constraints(self, cs: ConstraintSystemRef<F>) -> R1CSResult<()> {
-        let a = cs.new_witness_variable(|| self.a.ok_or(SynthesisError::AssignmentMissing))?;
-        let b = cs.new_witness_variable(|| self.b.ok_or(SynthesisError::AssignmentMissing))?;
-        let c = cs.new_input_variable(|| {
-            let mut a = self.a.ok_or(SynthesisError::AssignmentMissing)?;
-            let b = self.b.ok_or(SynthesisError::AssignmentMissing)?;
-            a *= &b;
-            Ok(a)
-        })?;
-
-        cs.enforce_constraint(lc!() + a, lc!() + b, lc!() + c)?;
-        Ok(())
-    }
-}
-
 impl<E: Pairing> Circuit<E> {
     pub fn num_constraints(&self) -> usize {
         assert!(self.l.len() == self.r.len() && self.r.len() == self.o.len());
@@ -94,6 +72,28 @@ impl<E: Pairing> Circuit<E> {
             Self::matrix_to_qap(&self.r),
             Self::matrix_to_qap(&self.o),
         )
+    }
+}
+
+#[derive(Clone)]
+struct MyCircuit<F: Field> {
+    a: Option<F>,
+    b: Option<F>,
+}
+
+impl<F: Field> ConstraintSynthesizer<F> for MyCircuit<F> {
+    fn generate_constraints(self, cs: ConstraintSystemRef<F>) -> R1CSResult<()> {
+        let a = cs.new_witness_variable(|| self.a.ok_or(SynthesisError::AssignmentMissing))?;
+        let b = cs.new_witness_variable(|| self.b.ok_or(SynthesisError::AssignmentMissing))?;
+        let c = cs.new_input_variable(|| {
+            let mut a = self.a.ok_or(SynthesisError::AssignmentMissing)?;
+            let b = self.b.ok_or(SynthesisError::AssignmentMissing)?;
+            a *= &b;
+            Ok(a)
+        })?;
+
+        cs.enforce_constraint(lc!() + a, lc!() + b, lc!() + c)?;
+        Ok(())
     }
 }
 
@@ -144,9 +144,11 @@ fn main() {
         binding.witness_assignment.clone(),
     ]
     .concat();
-    println!("num_instance_variables: {}", cs.num_instance_variables());
-    println!("num_witness_variables: {}", cs.num_witness_variables());
-    println!("{:?}", a);
+    let public_inputs = binding.instance_assignment.clone();
+    let private_inputs = binding.witness_assignment.clone();
+    println!("public_inputs: {:?}", public_inputs);
+    println!("private_inputs: {:?}", private_inputs);
+    println!("witness: {:?}", a);
 
     let circuit: Circuit<P> = Circuit {
         l,
@@ -156,40 +158,13 @@ fn main() {
         num_private_inputs: cs.num_witness_variables(),
     };
 
-    // R1CS verification
-    // TODO: remove
-    let l_a: Vec<ScalarField> = circuit
-        .l
-        .iter()
-        .map(|r| r.iter().zip(&a).map(|(&x, y)| x * y).sum())
-        .collect();
-    let r_a: Vec<ScalarField> = circuit
-        .r
-        .iter()
-        .map(|r| r.iter().zip(&a).map(|(&x, y)| x * y).sum())
-        .collect();
-    let o_a: Vec<ScalarField> = circuit
-        .o
-        .iter()
-        .map(|r| r.iter().zip(&a).map(|(&x, y)| x * y).sum())
-        .collect();
-    assert_eq!(
-        l_a.iter()
-            .zip(&r_a)
-            .map(|(&a, b)| a * b)
-            .collect::<Vec<ScalarField>>(),
-        o_a
-    );
-
-    let public_inputs = &a[0..circuit.num_public_inputs];
-    let private_inputs = &a[circuit.num_public_inputs..];
-    println!("public_inputs: {:?}", public_inputs);
-    println!("private_inputs: {:?}", private_inputs);
-
     let rng = &mut StdRng::seed_from_u64(0);
+
     let srs = setup::<P>(rng, &circuit);
+
     let proof = prove::<P>(rng, &circuit, &srs, &a);
     println!("proof: {:?}", &proof);
+
     println!(
         "verified: {}",
         verify::<P>(&circuit, &srs, &public_inputs, &proof)

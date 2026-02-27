@@ -26,7 +26,7 @@ where
     G: CurveGroup<ScalarField = F>,
 {
     (0..n)
-        .map(|i| tau.pow([i as u64])) // TODO: what if i exceeds u64?
+        .map(|i| tau.pow([i as u64]))
         .map(|x| (g * x).into())
         .collect()
 }
