@@ -6,6 +6,7 @@ use ark_std::{UniformRand, rand::Rng};
 use crate::Circuit;
 
 #[derive(Clone, Debug, PartialEq)]
+#[allow(clippy::upper_case_acronyms)]
 pub struct SRS<E: Pairing> {
     pub alpha_g1: E::G1Affine,
     pub beta_g1: E::G1Affine,
@@ -69,12 +70,12 @@ pub fn setup<E: Pairing>(rng: &mut impl Rng, circuit: &Circuit<E>) -> SRS<E> {
         .collect();
 
     SRS {
-        alpha_g1: (g1_generator * &alpha).into(),
-        beta_g1: (g1_generator * &beta).into(),
-        beta_g2: (g2_generator * &beta).into(),
-        gamma_g2: (g2_generator * &gamma).into(),
-        delta_g1: (g1_generator * &delta).into(),
-        delta_g2: (g2_generator * &delta).into(),
+        alpha_g1: (g1_generator * alpha).into(),
+        beta_g1: (g1_generator * beta).into(),
+        beta_g2: (g2_generator * beta).into(),
+        gamma_g2: (g2_generator * gamma).into(),
+        delta_g1: (g1_generator * delta).into(),
+        delta_g2: (g2_generator * delta).into(),
         powers_of_tau_g1,
         powers_of_tau_g2,
         upsilons_g1,

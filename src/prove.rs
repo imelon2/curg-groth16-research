@@ -48,10 +48,7 @@ pub fn prove<E: Pairing>(
 
     let h = (&sum_a_u * &sum_a_v - &sum_a_w) / circuit.t();
 
-    // QAP verification
-    // TODO: remove
-    let temp_h_t = &h * circuit.t();
-    assert_eq!(&sum_a_u * &sum_a_v, &sum_a_w + temp_h_t);
+    debug_assert_eq!(&sum_a_u * &sum_a_v, &sum_a_w + &h * circuit.t());
 
     let h_t_at_tau = srs
         .upsilons_g1
