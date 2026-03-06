@@ -98,7 +98,7 @@ $$
 in = d + 10 \quad (d \ge 0)
 $$
 
-<details> <summary>제약 1 Rust 코드 보기</summary>
+<details><summary style="color: gray;"> 제약사항 1 Rust 코드 보기 </summary>
 
 ```RUST
 // ── 제약 1: ────────────────────────
@@ -133,7 +133,7 @@ $$
 d = d_{0} \cdot 2^{0} + d_{1} \cdot 2^{1} + d_{2} \cdot 2^{2} + d_{3} \cdot 2^{3}
 $$
 
-<details> <summary>제약 2 Rust 코드 보기</summary>
+<details> <summary style="color: gray;">제약사항 2 Rust 코드 보기</summary>
 
 ```RUST
 // ── 제약 2: ──────────────────────
@@ -190,7 +190,7 @@ $$
 $$
 
 
-<details> <summary>제약 3~6 Rust 코드 보기</summary>
+<details> <summary style="color: gray;">제약사항 3~6 Rust 코드 보기</summary>
 
 ```RUST
 // ── 제약 3~6 ──────────────────
@@ -232,7 +232,7 @@ $$
 in = in_{0} \cdot 2^{0} + in_{1} \cdot 2^{1} + in_{2} \cdot 2^{2} + in_{3} \cdot 2^{3}
 $$
 
-<details> <summary>제약 7 Rust 코드 보기</summary>
+<details> <summary style="color: gray;">제약사항 7 Rust 코드 보기</summary>
 
 ```rust
 // ── 제약 7: in = in0·2⁰ + in1·2¹ + in2·2² + in3·2³ ─────────────────
@@ -262,7 +262,7 @@ $$
 0 = in_{3}(in_{3} - 1)
 $$
 
-<details> <summary>제약 8~11 Rust 코드 보기</summary>
+<details> <summary style="color: gray;">제약사항 8~11 Rust 코드 보기</summary>
 
 ```rust
 // ── 제약 8~11: in_i ∈ {0,1}  →  in_i × (in_i - 1) = 0 ──────────────
