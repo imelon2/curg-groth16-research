@@ -92,11 +92,29 @@ $$
 
 ## 제약사항 (1)
 
-*“내가 가진 숫자($in$)”가 “10보다 큰 숫자”임*을 조금 더 풀어 쓰면 다음과 같습니다.
+*“내가 가진 숫자($in$)”가 “10 이상의 큰 숫자”임*을 조금 더 풀어 쓰면 다음과 같습니다.
 
 $$
 in = d + 10 \quad (d \ge 0)
 $$
+
+<details> <summary>제약 1 Rust 코드 보기</summary>
+
+```RUST
+// ── 제약 1: ────────────────────────
+// in = d + 10 = (d + 10) × 1 = in 
+//           A = (d + 10)
+//           B = 1
+//           C = in_
+cs.enforce_constraint(
+    lc!() + d + (F::from(10u64), Variable::One), # A
+    lc!() + Variable::One,                       # B
+    lc!() + in_,                                 # C
+)?;
+```
+
+</details>
+</br>
 
 만약 $d$가 0 이상의 값이라는 제약사항 $(d \ge 0)$ 을 추가한다면, $in$은 무조건 10 이상의 숫자인 경우에만 위 표현식을 만족합니다.
 
@@ -107,16 +125,28 @@ $$
 반면 $in = 9$라면 $d = -1$이 되면서 $d \ge 0$ 조건을 만족하지 못합니다.
 
 ## 제약사항 (2)
-
 그러나 $A \times B = C$ 구조에서는 $\ge$ 연산자를 직접 표현할 수 없습니다. 따라서 $(d \ge 0)$ 조건을 다른 방식으로 강제해야 합니다.
 
 가장 널리 사용되는 방법은 숫자를 **강제로 비트(bit) 형태로 표현**하게 만들어 음수를 사용할 수 없도록 하는 것입니다. 이를 제약식으로 표현하면 다음과 같습니다.
 
-식 (1)
-
 $$
 d = d_{0} \cdot 2^{0} + d_{1} \cdot 2^{1} + d_{2} \cdot 2^{2} + d_{3} \cdot 2^{3}
 $$
+
+<details> <summary>제약 2 Rust 코드 보기</summary>
+
+```RUST
+// ── 제약 2: ──────────────────────
+// d = ( d0·2⁰ + d1·2¹ + d2·2² + d3·2³ ) × 1
+cs.enforce_constraint(
+    lc!() + d0 + (F::from(2u64), d1) + (F::from(4u64), d2) + (F::from(8u64), d3), # A
+    lc!() + Variable::One,                                                        # B
+    lc!() + d,                                                                    # C
+)?;
+```
+
+</details>
+</br>
 
 여기서 $d_{0} \sim d_{3}$는 $d$를 구성하는 비트입니다.
 
@@ -136,7 +166,7 @@ $$
 
 이 제약을 추가하면, 증명자는 $d$를 반드시 비트 합으로 표현해야 하므로 음수를 사용할 수 없게 됩니다.
 
-## 제약사항 (3)
+## 제약사항 (3~6)
 
 하지만 아직 문제가 남아 있습니다. 비트 합으로 표현하도록 했다고 해서 $d_{0} \sim d_{3}$가 반드시 0 또는 1이라는 보장은 없습니다.
 
@@ -159,13 +189,28 @@ $$
 0 = d_{3}(d_{3} - 1)
 $$
 
+
+<details> <summary>제약 3~6 Rust 코드 보기</summary>
+
+```RUST
+// ── 제약 3~6 ──────────────────
+// d_i ∈ {0,1}  →  d_i × (d_i - 1) = 0 
+cs.enforce_constraint(lc!() + d0, lc!() + d0 + (-F::from(1u64), Variable::One), lc!())?;
+cs.enforce_constraint(lc!() + d1, lc!() + d1 + (-F::from(1u64), Variable::One), lc!())?;
+cs.enforce_constraint(lc!() + d2, lc!() + d2 + (-F::from(1u64), Variable::One), lc!())?;
+cs.enforce_constraint(lc!() + d3, lc!() + d3 + (-F::from(1u64), Variable::One), lc!())?;
+```
+
+</details>
+</br>
+
 이 식은 각 $d_{i}$가 0 또는 1일 때만 성립합니다.
 
-> **IMPORTANT**  
+> [!IMPORTANT] 
 > 예시에서는 4비트로 범위를 설계했습니다.  
 > 만약 “내가 가진 숫자”가 “2006보다 큰 숫자”라면, 11비트 이상으로 확장하면 됩니다.
 
-## 제약사항 (4)
+## 제약사항 (7, 8~11)
 
 이제 $d \ge 0$ 조건은 강제할 수 있게 되었지만, 또 다른 문제가 발생합니다. $in$ 값이 커질 경우, $d$가 우리가 설계한 비트 범위를 벗어날 수 있습니다.
 
@@ -183,10 +228,23 @@ $$
 
 16은 5비트로 표현해야 하는 값이므로, 4비트로 제한한 현재 설계에서는 표현할 수 없습니다. 따라서 $in$ 역시 동일한 비트 범위로 제한해야 합니다.
 
-
 $$
 in = in_{0} \cdot 2^{0} + in_{1} \cdot 2^{1} + in_{2} \cdot 2^{2} + in_{3} \cdot 2^{3}
 $$
+
+<details> <summary>제약 7 Rust 코드 보기</summary>
+
+```rust
+// ── 제약 7: in = in0·2⁰ + in1·2¹ + in2·2² + in3·2³ ─────────────────
+cs.enforce_constraint(
+    lc!() + in0 + (F::from(2u64), in1) + (F::from(4u64), in2) + (F::from(8u64), in3),
+    lc!() + Variable::One,
+    lc!() + in_,
+)?;
+```
+
+</details>
+</br>
 
 $$
 0 = in_{0}(in_{0} - 1)
@@ -203,6 +261,19 @@ $$
 $$
 0 = in_{3}(in_{3} - 1)
 $$
+
+<details> <summary>제약 8~11 Rust 코드 보기</summary>
+
+```rust
+// ── 제약 8~11: in_i ∈ {0,1}  →  in_i × (in_i - 1) = 0 ──────────────
+cs.enforce_constraint(lc!() + in0, lc!() + in0 + (-F::from(1u64), Variable::One), lc!())?;
+cs.enforce_constraint(lc!() + in1, lc!() + in1 + (-F::from(1u64), Variable::One), lc!())?;
+cs.enforce_constraint(lc!() + in2, lc!() + in2 + (-F::from(1u64), Variable::One), lc!())?;
+cs.enforce_constraint(lc!() + in3, lc!() + in3 + (-F::from(1u64), Variable::One), lc!())?;
+```
+
+</details>
+</br>
 
 제약사항 (1), (2)와 동일한 원리로 $in$ 역시 4비트 범위로 강제할 수 있습니다.
 
